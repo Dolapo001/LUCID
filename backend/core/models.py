@@ -1,4 +1,21 @@
+from django.conf import settings
 from django.db import models
+
+
+class UserProfile(models.Model):
+    """Role assignment for an auth user (FR-9.2)."""
+    ROLE_CHOICES = [
+        ('farmer', 'Farmer / Herd Manager'),
+        ('veterinarian', 'Veterinarian'),
+        ('researcher', 'Researcher'),
+        ('administrator', 'Administrator'),
+    ]
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='profile')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='farmer')
+
+    def __str__(self):
+        return f"{self.user.username} ({self.role})"
+
 
 class Dataset(models.Model):
     SOURCE_CHOICES = [

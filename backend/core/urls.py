@@ -1,6 +1,9 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from core.views import DatasetViewSet, CowViewSet, TrainedModelViewSet, PredictionViewSet, AlertViewSet, DiagnosisViewSet
+from core.views import (
+    DatasetViewSet, CowViewSet, TrainedModelViewSet, PredictionViewSet,
+    AlertViewSet, DiagnosisViewSet, register, login,
+)
 
 router = DefaultRouter()
 router.register(r'datasets', DatasetViewSet, basename='dataset')
@@ -11,5 +14,7 @@ router.register(r'alerts', AlertViewSet, basename='alert')
 router.register(r'diagnoses', DiagnosisViewSet, basename='diagnosis')
 
 urlpatterns = [
+    path('auth/register/', register, name='register'),
+    path('auth/login/', login, name='login'),
     path('', include(router.urls)),
 ]

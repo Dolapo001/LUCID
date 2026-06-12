@@ -102,6 +102,14 @@ class DairyMLService:
                 X, y, cow_ids, timestamps, test_size=0.2, random_state=random_seed
             )
 
+        # A classifier needs at least two classes in the training partition.
+        if len(np.unique(y_train)) < 2:
+            raise ValueError(
+                f"Trait '{trait}' has only one class in the training split "
+                f"({int(np.sum(y))} positives across {len(y)} rows). "
+                "Generate a larger/longer dataset or adjust trait prevalence before training."
+            )
+
         # Handle class imbalance by calculating weights
         pos_weight = (len(y_train) - sum(y_train)) / (sum(y_train) + 1e-5)
         
@@ -192,10 +200,13 @@ class DairyMLService:
             meta = {'is_pipeline': is_pipeline, 'alg_key': alg_key}
             joblib.dump({'explainer': explainer, 'meta': meta, 'scaler': scaler if is_pipeline else None}, explainer_path)
 
-            # Compute SHAP Values on the test sample for global importance
+            # Compute SHAP Values on the test sample for global importance.
+            # Tree explainers can fail a strict additivity check on tiny/degenerate
+            # samples; disable it for tree models (the attributions remain valid).
             X_for_shap = X_test_scaled if is_pipeline else X_test_sample
-            shap_values = explainer(X_for_shap)
-            
+            is_tree = alg_key in ('decision_tree', 'random_forest', 'gradient_boosting')
+            shap_values = explainer(X_for_shap, check_additivity=False) if is_tree else explainer(X_for_shap)
+
             # Extract SHAP importance
             # shap_values.values has shape (samples, features) or (samples, features, classes)
             if len(shap_values.values.shape) == 3: # multi-class or discrete outputs
@@ -419,8 +430,9 @@ class DairyMLService:
             feature_snapshot=feature_set.features
         )
 
-        # Compute SHAP value
-        shap_values = explainer(X_for_shap)
+        # Compute SHAP value (disable additivity check for tree explainers)
+        is_tree = active_model.algorithm in ('decision_tree', 'random_forest', 'gradient_boosting')
+        shap_values = explainer(X_for_shap, check_additivity=False) if is_tree else explainer(X_for_shap)
         if len(shap_values.values.shape) == 3:
             shap_vals = shap_values.values[0, :, 1] # positive class
         else:

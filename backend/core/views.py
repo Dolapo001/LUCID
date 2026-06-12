@@ -1,19 +1,53 @@
 import os
 from datetime import datetime
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.conf import settings
+from django.contrib.auth import authenticate
 from django.http import FileResponse
 
 from core.models import Dataset, Cow, RawSensorRecord, FeatureSet, TrainedModel, Prediction, Explanation, Alert, Diagnosis
 from core.serializers import (
     DatasetSerializer, CowSerializer, RawSensorRecordSerializer,
     FeatureSetSerializer, TrainedModelSerializer, PredictionSerializer,
-    AlertSerializer, DiagnosisSerializer
+    AlertSerializer, DiagnosisSerializer, RegisterSerializer, UserSerializer
 )
 from core.data_manager import DairyDataManager
 from core.ml_service import DairyMLService
+
+
+def _token_payload(user):
+    token, _ = Token.objects.get_or_create(user=user)
+    role = getattr(getattr(user, 'profile', None), 'role', None)
+    return {'token': token.key, 'user': UserSerializer(user).data, 'role': role}
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register(request):
+    """Register a user with a role and return an auth token (FR-9.1, FR-9.2)."""
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response(_token_payload(user), status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    """Authenticate and return a token with the user's role (FR-9.1)."""
+    user = authenticate(
+        username=request.data.get('username'),
+        password=request.data.get('password'),
+    )
+    if user is None:
+        return Response({'error': 'Invalid credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response(_token_payload(user), status=status.HTTP_200_OK)
+
 
 class DatasetViewSet(viewsets.ModelViewSet):
     queryset = Dataset.objects.all().order_by('-created_at')
@@ -75,6 +109,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
 class CowViewSet(viewsets.ModelViewSet):
     queryset = Cow.objects.all().order_by('cow_id')
     serializer_class = CowSerializer
+    filterset_fields = ['breed', 'herd_id']
 
 class TrainedModelViewSet(viewsets.ModelViewSet):
     queryset = TrainedModel.objects.all().order_by('-created_at')
@@ -201,6 +236,7 @@ class PredictionViewSet(viewsets.ModelViewSet):
 class AlertViewSet(viewsets.ModelViewSet):
     queryset = Alert.objects.all().order_by('-created_at')
     serializer_class = AlertSerializer
+    filterset_fields = ['status', 'trait', 'cow']
 
     def update(self, request, *args, **kwargs):
         # Allow patching status
