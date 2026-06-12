@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LUCID — Livestock Unified Clinical Intelligence Dashboard",
-  description: "Explainable AI decision-support system for precision dairy farming in Nigeria. Sensor-based prediction of health and reproductive traits with SHAP explanation layer.",
+  title: "LUCID — Dairy Farm Intelligence",
+  description: "Operational intelligence system for dairy farms: live herd monitoring, milk yield and feed efficiency tracking, predictive health modeling, and raw sensor telemetry in one layered interface.",
 };
 
 export default function RootLayout({
