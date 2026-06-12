@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import CommandCenter from './components/CommandCenter';
+
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Activity, Settings, LayoutDashboard, BrainCircuit, 
   AlertTriangle, FlaskConical, Database, User, LogOut, ChevronRight, CheckCircle2 
 } from 'lucide-react';
+
 
 // ==================== MOCK DATA FOR DEMO FALLBACKS ====================
 const MOCK_COWS = [
@@ -150,6 +153,16 @@ export default function Dashboard() {
 
       {/* ── MAIN CONTENT ── */}
       <main className="main-content">
+        
+        {/* ==================== TAB: DASHBOARD OVERVIEW ==================== */}
+        {activeTab === 'dashboard' && (
+          <CommandCenter
+            cows={cows}
+            alerts={alerts}
+            models={models}
+            onRefresh={fetchBackendData}
+          />
+        )}
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
