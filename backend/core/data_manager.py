@@ -15,13 +15,18 @@ def calculate_thi(temp_c, relative_humidity):
 class DairyDataManager:
     @staticmethod
     @transaction.atomic
-    def generate_synthetic(name, version, herd_size=30, duration_days=30, interval_minutes=15):
+    def generate_synthetic(name, version, herd_size=30, duration_days=30, interval_minutes=15, random_seed=42):
         """
         Generates a literature-calibrated synthetic dataset representing tropical Nigerian conditions.
+        A fixed random seed keeps generation reproducible (NFR-3).
         """
-        # Delete existing dataset with same version if exists
+        # Seed RNG for reproducibility
+        np.random.seed(random_seed)
+
+        # Delete any existing dataset and its cows for this version so re-runs are idempotent.
         Dataset.objects.filter(version=version).delete()
-        
+        Cow.objects.filter(cow_id__startswith=f"COW_{version}_").delete()
+
         # Create dataset metadata
         dataset = Dataset.objects.create(
             name=name,
@@ -31,6 +36,7 @@ class DairyDataManager:
                 'herd_size': herd_size,
                 'duration_days': duration_days,
                 'interval_minutes': interval_minutes,
+                'random_seed': random_seed,
                 'generated_at': datetime.now().isoformat()
             }
         )
@@ -87,15 +93,15 @@ class DairyDataManager:
             
             # Mastitis: 15% probability of a 4-day bout
             mastitis_events[cow.cow_id] = []
-            if np.random.rand() < 0.15:
-                mastitis_start_day = np.random.uniform(5, duration_days - 5)
+            if np.random.rand() < 0.30:
+                mastitis_start_day = np.random.uniform(4, duration_days - 4)
                 mastitis_events[cow.cow_id].append((mastitis_start_day, mastitis_start_day + 4.0))
 
-            # Calving: 10% probability of calving in this period (restlessness for 12 hours)
+            # Calving: ~25% probability of calving in this period (restlessness for ~18 hours)
             calving_events[cow.cow_id] = []
-            if np.random.rand() < 0.10:
-                calving_start_day = np.random.uniform(10, duration_days - 2)
-                calving_events[cow.cow_id].append((calving_start_day, calving_start_day + 0.5)) # 12 hours restlessness
+            if np.random.rand() < 0.25:
+                calving_start_day = np.random.uniform(8, duration_days - 1)
+                calving_events[cow.cow_id].append((calving_start_day, calving_start_day + 0.75)) # ~18 hours restlessness
 
         records_to_create = []
         
@@ -306,8 +312,14 @@ class DairyDataManager:
         # Heat stress label: high THI and high temperature deviation
         df['label_heat_stress'] = ((df['thi'] > 78.0) & (df['temp_deviation'] > 0.4)).astype(int)
         
-        # Calving label: high lying bout change, activity rolling mean increased, rumination dropped
-        df['label_calving_imminent'] = ((df['lying_bout_change'] > 3.0) & (df['activity_roll_mean'] > df['cow__baseline_activity'] * 1.05) & (df['rumination_min'] < (df['cow__baseline_rumination']/4.0) * 0.9)).astype(int)
+        # Calving label: marked restlessness (lying-bout swings) with raised instantaneous
+        # activity and a rumination dip — the injected pre-calving signature. Keyed off
+        # instantaneous signals rather than the 24h rolling mean so short events are captured.
+        df['label_calving_imminent'] = (
+            (df['lying_bout_change'] > 2.5)
+            & (df['activity_zscore'] > 0.4)
+            & (df['rumination_min'] < (df['cow__baseline_rumination'] / 4.0) * 0.95)
+        ).astype(int)
 
         # Re-ensure some labels are injected/present even if the threshold conditions are noisy, using the probabilities
         # (This aligns with the literature-calibrated signatures)
@@ -382,7 +394,7 @@ class DairyDataManager:
             
             # Generate mock public data: 5 cows, 10 days
             mock_rows = []
-            start_time = datetime.now() - timedelta(days=10)
+            start_time = timezone.now() - timedelta(days=10)
             for cow_idx in range(1, 6):
                 cow_id = f"PUB_COW_{cow_idx:03d}"
                 for i in range(10 * 96):
@@ -437,6 +449,9 @@ class DairyDataManager:
                 df[col] = default
                 
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+        # Make timestamps timezone-aware to match Django's USE_TZ setting.
+        if getattr(df['timestamp'].dt, 'tz', None) is None:
+            df['timestamp'] = df['timestamp'].dt.tz_localize(timezone.get_current_timezone())
 
         # Create cows and records
         cows_cache = {}

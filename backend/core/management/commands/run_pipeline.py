@@ -11,12 +11,14 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING("Starting Precision Dairy ML Pipeline..."))
 
         # 1. Generate Synthetic Dataset
-        self.stdout.write("Generating synthetic dataset (15 cows, 15 days)...")
+        # 30 cows over 21 days gives enough animals for a leave-cow-out split to
+        # contain positive cases for the rarer traits (mastitis, calving).
+        self.stdout.write("Generating synthetic dataset (30 cows, 21 days)...")
         dataset = DairyDataManager.generate_synthetic(
             name="Seed Synthetic Dataset",
             version="seed_synthetic_v1",
-            herd_size=15,
-            duration_days=15,
+            herd_size=30,
+            duration_days=21,
             interval_minutes=15
         )
         self.stdout.write(self.style.SUCCESS(f"Generated dataset ID: {dataset.id}, version: {dataset.version}"))
@@ -67,5 +69,28 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(f"  Alert Created! ID: {alert.id}"))
         else:
             self.stdout.write(self.style.ERROR("No features available for prediction test."))
+
+        # 7. Seed herd-wide predictions & alerts so the dashboard has live data.
+        #    For each cow we take its most recent window and predict every trait.
+        self.stdout.write("\nSeeding herd-wide predictions and alerts...")
+        traits = ['estrus', 'mastitis_risk', 'heat_stress', 'calving_imminent']
+        seeded_predictions = 0
+        seeded_alerts = 0
+        for cow_id in FeatureSet.objects.filter(dataset=dataset).values_list('cow_id', flat=True).distinct():
+            latest = (FeatureSet.objects.filter(dataset=dataset, cow_id=cow_id)
+                      .order_by('-timestamp').first())
+            if not latest:
+                continue
+            for trait in traits:
+                try:
+                    _, alert = DairyMLService.make_prediction_and_explain(cow_id, latest.timestamp, trait)
+                    seeded_predictions += 1
+                    if alert:
+                        seeded_alerts += 1
+                except Exception:
+                    continue
+        self.stdout.write(self.style.SUCCESS(
+            f"Seeded {seeded_predictions} predictions and {seeded_alerts} alerts."
+        ))
 
         self.stdout.write(self.style.SUCCESS("\nPipeline execution complete! All outputs saved."))

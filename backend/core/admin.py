@@ -1,5 +1,7 @@
 from django.contrib import admin
-from core.models import Dataset, Cow, RawSensorRecord, FeatureSet, TrainedModel, Prediction, Explanation, Alert, Diagnosis
+from core.models import Dataset, Cow, RawSensorRecord, FeatureSet, TrainedModel, Prediction, Explanation, Alert, Diagnosis, UserProfile
+
+admin.site.register(UserProfile)
 
 admin.site.register(Dataset)
 admin.site.register(Cow)

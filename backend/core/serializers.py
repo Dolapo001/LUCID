@@ -1,5 +1,36 @@
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from core.models import Dataset, Cow, RawSensorRecord, FeatureSet, TrainedModel, Prediction, Explanation, Alert, Diagnosis
+from core.models import Dataset, Cow, RawSensorRecord, FeatureSet, TrainedModel, Prediction, Explanation, Alert, Diagnosis, UserProfile
+
+User = get_user_model()
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, default='farmer')
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'role']
+
+    def create(self, validated_data):
+        role = validated_data.pop('role', 'farmer')
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email', ''),
+            password=validated_data['password'],
+        )
+        UserProfile.objects.create(user=user, role=role)
+        return user
+
+
+class UserSerializer(serializers.ModelSerializer):
+    role = serializers.CharField(source='profile.role', read_only=True)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role']
 
 class DatasetSerializer(serializers.ModelSerializer):
     class Meta:

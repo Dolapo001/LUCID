@@ -100,8 +100,11 @@ export default function Dashboard() {
   const [diagConfirm, setDiagConfirm] = useState(true);
   const [diagComment, setDiagComment] = useState('');
 
-  // API URL base
-  const API_BASE = 'http://localhost:8000/api';
+  // API URL base (override with NEXT_PUBLIC_API_BASE)
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000/api';
+
+  // DRF list endpoints are paginated ({ count, results }); normalise to a plain array.
+  const asList = (data: any) => (Array.isArray(data) ? data : data?.results ?? []);
 
   // Load Initial Data
   useEffect(() => {
@@ -111,26 +114,26 @@ export default function Dashboard() {
   const fetchBackendData = async () => {
     try {
       // Test if API is alive
-      const res = await fetch(`${API_BASE}/cows/`);
+      const res = await fetch(`${API_BASE}/cows/?page_size=1000`);
       if (!res.ok) throw new Error('API not available');
-      
-      const cowsData = await res.json();
+
+      const cowsData = asList(await res.json());
       setCows(cowsData);
 
-      const alertsRes = await fetch(`${API_BASE}/alerts/`);
-      const alertsData = await alertsRes.json();
+      const alertsRes = await fetch(`${API_BASE}/alerts/?page_size=1000`);
+      const alertsData = asList(await alertsRes.json());
       setAlerts(alertsData);
 
-      const modelsRes = await fetch(`${API_BASE}/models/`);
-      const modelsData = await modelsRes.json();
+      const modelsRes = await fetch(`${API_BASE}/models/?page_size=1000`);
+      const modelsData = asList(await modelsRes.json());
       setModels(modelsData);
 
-      const datasetsRes = await fetch(`${API_BASE}/datasets/`);
-      const datasetsData = await datasetsRes.json();
+      const datasetsRes = await fetch(`${API_BASE}/datasets/?page_size=1000`);
+      const datasetsData = asList(await datasetsRes.json());
       setDatasets(datasetsData);
 
-      const diagRes = await fetch(`${API_BASE}/diagnoses/`);
-      const diagData = await diagRes.json();
+      const diagRes = await fetch(`${API_BASE}/diagnoses/?page_size=1000`);
+      const diagData = asList(await diagRes.json());
       setDiagnoses(diagData);
 
       setIsDemoMode(false);
